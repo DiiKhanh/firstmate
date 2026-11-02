@@ -73,7 +73,7 @@ case "${1:-}" in
     payload=${1:-}
     if [ "$literal" = 1 ]; then
       case "$payload" in
-        ". '"*"'") staged=${payload#". '"}; staged=${staged%"'"}; [ ! -f "$staged" ] || payload=$(cat "$staged") ;;
+        *". '"*"'") staged=${payload#*". '"}; staged=${staged%"'"}; [ ! -f "$staged" ] || payload=$(cat "$staged") ;;
       esac
       printf '%s\n' "$payload" >> "$D/literal"
       case "$payload" in
@@ -2510,7 +2510,7 @@ case "${1:-} ${2:-}" in
     # and tests/fixtures.sh do.
     payload=${4:-}
     case "$payload" in
-      ". '"*"'") staged=${payload#". '"}; staged=${staged%"'"}; [ ! -f "$staged" ] || payload=$(cat "$staged") ;;
+      *". '"*"'") staged=${payload#*". '"}; staged=${staged%"'"}; [ ! -f "$staged" ] || payload=$(cat "$staged") ;;
     esac
     case "$payload" in
       *'encode launch-brief'* | *'Firstmate operational input waiting: read'*)

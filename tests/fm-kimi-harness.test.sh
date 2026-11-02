@@ -135,7 +135,7 @@ case "${1:-}" in
     done
     if [ -n "$literal" ]; then
       case "$literal" in
-        ". '"*"'") staged=${literal#". '"}; staged=${staged%"'"}; [ ! -f "$staged" ] || literal=$(cat "$staged") ;;
+        *". '"*"'") staged=${literal#*". '"}; staged=${staged%"'"}; [ ! -f "$staged" ] || literal=$(cat "$staged") ;;
       esac
       case "$literal" in
         *' --auto')
@@ -407,8 +407,8 @@ kimi_launch_dir() {
 
 kimi_typed_launch_file() {
   local log=$1 src
-  src=$(grep -o "\. '/tmp/fm-[^']*'" "$log" | tail -1)
-  src=${src#". '"}
+  src=$(grep -o "'/tmp/fm-[^']*/launch\.[^']*\.sh'" "$log" | tail -1)
+  src=${src#"'"}
   src=${src%"'"}
   [ -n "$src" ] || fail "spawn did not type a staged launch source line"
   printf '%s' "$src"

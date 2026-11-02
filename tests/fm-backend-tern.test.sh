@@ -1564,8 +1564,8 @@ case "$cmd" in
     if [ "${2:-}" = text ]; then
       a=${3:-}
       case "$a" in
-        ". '"*"'")
-          staged=${a#". '"}
+        *". '"*"'")
+          staged=${a#*". '"}
           staged=${staged%"'"}
           [ ! -f "$staged" ] || a=$(cat "$staged")
           ;;

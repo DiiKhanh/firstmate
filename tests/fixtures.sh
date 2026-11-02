@@ -94,9 +94,11 @@ fm_test_fake_gh_axi() {
 # fm_test_fake_tmux_spawn <fakebin>
 # Spawn-world tmux: pane_current_path from FM_FAKE_PANE_PATH, session named
 # firstmate, window ops succeed, send-keys succeed. When FM_FAKE_LAUNCH_LOG is
-# set, each send-keys -l payload is appended one per line. When FM_FAKE_PANE_LOG
-# is set, each send-keys TEXT-LINE payload (the pre-launch pane exports, which
-# carry no -l) is appended there instead, one per line in send order. Optional
+# set, each send-keys -l payload is appended one per line. When
+# FM_FAKE_LAUNCH_SOURCE_LOG is set, the short launch-file command is recorded
+# before FM_FAKE_LAUNCH_LOG resolves it to the staged command. When
+# FM_FAKE_PANE_LOG is set, each send-keys TEXT-LINE payload (the pre-launch pane
+# exports, which carry no -l) is appended there instead, one per line in send order. Optional
 # FM_FAKE_DUPLICATE_WINDOW is printed from list-windows. A staged OpenCode 2
 # launch simulates its busy-state plugin per FM_FAKE_OPENCODE_TURN (see below),
 # and FM_FAKE_ENTER_LOG records each bare Enter key.
@@ -202,9 +204,11 @@ case "${1:-}" in
     prev=
     for a in "$@"; do
       if [ "$prev" = "-l" ]; then
+        [ -z "${FM_FAKE_LAUNCH_SOURCE_LOG:-}" ] \
+          || printf '%s\n' "$a" >> "$FM_FAKE_LAUNCH_SOURCE_LOG"
         case "$a" in
-          ". '"*"'")
-            staged=${a#". '"}
+          *". '"*"'")
+            staged=${a#*". '"}
             staged=${staged%"'"}
             if [ -f "$staged" ] && grep -q -- 'opencode.* --standalone --prompt' "$staged"; then
               fake_opencode_launched
@@ -234,8 +238,8 @@ case "${1:-}" in
           # Direct literals past the terminal line buffer are truncated, so a
           # long launch only survives when it arrived through that short source.
           case "$a" in
-            ". '"*"'")
-              staged=${a#". '"}
+            *". '"*"'")
+              staged=${a#*". '"}
               staged=${staged%"'"}
               if [ -f "$staged" ]; then
                 a=$(cat "$staged")

@@ -121,8 +121,8 @@ remote_pane_payload() {  # <verb>
 }
 remote_launch_command() {
   local source_line staged
-  source_line=$(remote_pane_payload send-text | grep "^\. '.*'\$" | tail -1)
-  staged=${source_line#". '"}
+  source_line=$(remote_pane_payload send-text | grep "launch\..*\.sh'\$" | tail -1)
+  staged=${source_line#*". '"}
   staged=${staged%"'"}
   [ -n "$staged" ] && [ -f "$staged" ] || return 1
   cat "$staged"

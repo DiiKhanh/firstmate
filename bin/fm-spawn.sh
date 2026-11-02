@@ -7093,7 +7093,7 @@ LAUNCH_DIR="/tmp/fm-$ID+$LAUNCH_HOME_TOKEN"
 # and its visible error for inspection.
 if [ "$GIT_HOOKS_INSTALLED" = 1 ]; then
   GIT_CONFIG_ENV_FILE=$(shell_quote "$LAUNCH_DIR/git-config.$SPAWN_GEN.sh")
-  LAUNCH="$(shell_quote "$FM_ROOT/bin/fm-git-strip-ai-trailers.sh") env-file $(shell_quote "$GIT_HOOKS_DIR") $GIT_CONFIG_ENV_FILE && . $GIT_CONFIG_ENV_FILE || return 1 2>/dev/null || exit 1; $LAUNCH"
+  LAUNCH="$(shell_quote "$FM_ROOT/bin/fm-git-strip-ai-trailers.sh") env-file $(shell_quote "$GIT_HOOKS_DIR") $GIT_CONFIG_ENV_FILE && \. $GIT_CONFIG_ENV_FILE || return 1 2>/dev/null || exit 1; $LAUNCH"
 fi
 # Every agent this fleet launches - crewmate, scout, and secondmate, on a fresh
 # spawn and on a relaunch alike - runs with the compact-adviser kill switch on.
@@ -7358,7 +7358,7 @@ else
   SPAWN_LAUNCH_SENT=1
   # errexit is on here: a failed send still exits, and Orca source mode first
   # removes the credential-bearing file the pane never received.
-  LAUNCH_SOURCE_TEXT=". $(shell_quote "$LAUNCH_FILE")"
+  LAUNCH_SOURCE_TEXT="\. $(shell_quote "$LAUNCH_FILE")"
   if [ "$ORCA_LAUNCH_ENV_ENABLED" = 1 ]; then
     # A refused source-mode launch fails the source command, and some shells exit
     # under errexit on sourcing a file spawn already reclaimed even inside ||, so

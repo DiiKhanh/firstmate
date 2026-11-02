@@ -133,6 +133,7 @@ run_spawn() {
   # A test opts in to the set case via FM_TEST_CLAUDE_CONFIG_DIR.
   CLAUDE_CONFIG_DIR="${FM_TEST_CLAUDE_CONFIG_DIR:-}" \
     FM_FAKE_LAUNCH_LOG="$launchlog" FM_FAKE_PANE_LOG="${FM_TEST_PANE_LOG:-}" \
+    FM_FAKE_LAUNCH_SOURCE_LOG="${FM_TEST_LAUNCH_SOURCE_LOG:-}" \
     FM_FAKE_PI_VERSION="${FM_TEST_PI_VERSION:-0.84.0}" \
     FM_FAKE_OPENCODE_VERSION="${FM_TEST_OPENCODE_VERSION:-2.0.21}" \
     FM_FAKE_OPENCODE_PROBE_LOG="${FM_TEST_OPENCODE_PROBE_LOG:-}" \
@@ -580,6 +581,33 @@ test_launch_preserves_inherited_git_config() {
     return
   fi
   pass "launch appends the hooks config while preserving inherited Git credentials in every pane shell, fish included"
+}
+
+# A legal zsh alias for `.` must not intercept either the outer staged-launch
+# source or the inner Git-environment source before the worker command runs.
+test_launch_sourcing_ignores_dot_alias() {
+  local rec id=dot-alias-source-z1 out status source_log launch_source result
+  rec=$(make_spawn_case "$id" codex "$id")
+  read_case_record "$rec"
+  source_log="$CASE_DIR/launch-source.log"
+  : > "$source_log"
+
+  out=$(FM_TEST_LAUNCH_SOURCE_LOG="$source_log" \
+    run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+      "$id" "$PROJ_DIR" --harness 'printf "WORKER-RAN\\n"')
+  status=$?
+  expect_code 0 "$status" "dot-alias launch probe should spawn: $out"
+  launch_source=$(cat "$source_log")
+  [ -n "$launch_source" ] || fail "spawn did not send the staged-launch command"
+
+  result=$(ZDOTDIR="$CASE_DIR" /bin/zsh -f -c \
+    'alias '\''.'\''='\''printf "ALIAS-RAN\\n" && pwd'\''; eval "$1"' \
+    _ "$launch_source" 2>&1)
+  status=$?
+  expect_code 0 "$status" "a dot alias intercepted staged launch sourcing: $result"
+  assert_contains "$result" WORKER-RAN "alias-safe sourcing did not start the worker"
+  assert_not_contains "$result" ALIAS-RAN "the dot alias ran during launch sourcing"
+  pass "staged launch sourcing ignores a legal dot alias"
 }
 
 test_active_dispatch_profile_allows_raw_launch_command() {
@@ -2714,6 +2742,7 @@ test_codex_permission_modes
 test_codex_permission_invalid_refuses_before_mutation
 test_codex_permission_does_not_change_other_harnesses
 test_launch_preserves_inherited_git_config
+test_launch_sourcing_ignores_dot_alias
 test_worker_launch_delivers_role_scope
 test_no_profile_keeps_claude_profile_defaults
 test_claude_launch_brief_publishes_record_doorbell
