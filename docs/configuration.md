@@ -9,7 +9,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | --- | --- |
 | Firstmate's code, private files, or project location | [FM_HOME](#fm_home) and [operational home layout](#operational-home-layout-and-state) |
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
-| Worker permissions, accounts, or environment | [Codex approval review](#codex-automatic-approval-review), [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [Codex permission mode](#codex-permission-mode-configcodex-permission-mode), [persistent managed-policy failover](#persistent-managed-policy-failover), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), [several Claude accounts](#several-claude-accounts-configclaude-accounts), [worker tool exclusions](#worker-tool-exclusions-configcrew-exclude-tools), [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist), and its [Orca environment source](#orca-environment-source-configlaunch-env-tmux-session) |
+| Worker permissions, accounts, or environment | [Codex approval review](#codex-automatic-approval-review), [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [Codex permission mode](#codex-permission-mode-configcodex-permission-mode), [persistent managed-policy failover](#persistent-managed-policy-failover), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), [several Claude accounts](#several-claude-accounts-configclaude-accounts), [several Codex accounts](#several-codex-accounts-configcodex-accounts), [worker tool exclusions](#worker-tool-exclusions-configcrew-exclude-tools), [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist), and its [Orca environment source](#orca-environment-source-configlaunch-env-tmux-session) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), [external memory tiers](#external-memory-tiers-memory-layering-section), [record export](#record-export-configrecord-export-root), [startup memory budget](#startup-memory-budget-configstartup-memory-budget), and [stow guard](#stow-guard-configstow-guard) |
 | Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), [Codex native Stop park](#codex-native-stop-park-configcodex-stop-park), [warm-cache compaction](#warm-cache-compaction-configwarm-compact), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
@@ -180,6 +180,15 @@ The Pi extension reloads this preference on every Pi `session_start`, including 
 The Claude Code mod reloads it on every `session.start`, including same-process session replacement.
 It also loads the preference lazily before any row that can draw ahead of that event, including during `claude --continue` restoration.
 This preference is local to each Firstmate home and is not part of secondmate inherited configuration.
+
+## Pi bash timeout cap
+
+Pi and Pi-signed sessions loading [the primary extension](../.pi/extensions/fm-primary-turnend-guard.ts) can opt in by setting `FM_PI_BASH_TIMEOUT_MAX_MS` in their launch environment.
+The value must be a decimal integer from `1` through `2147483647` milliseconds (Pi's native timer maximum), without leading zeros.
+It is converted to seconds for Pi's Bash tool (`5000` becomes `5` seconds), supplying a missing timeout and capping an explicit larger numeric timeout.
+Explicit numeric timeouts at or below the cap are preserved.
+Unset or invalid values leave Bash calls unchanged.
+The cap applies to secondmates loading the same extension, but does not affect workers that do not load it.
 
 ## Pi repeated-read containment
 
@@ -844,8 +853,33 @@ Only author-actionable states, conflicts, and failing checks print; the maintain
 Reads are driven by the GitHub notifications feed: each pass makes one conditional read of it, which GitHub answers with an uncounted 304 while nothing changed, and reads only the owned PRs with new notification activity, PRs not yet read, and PRs whose last read did not settle.
 Every owned PR is still read when the feed is unavailable or returns a full page of notifications newer than the saved position, and at least every 15 minutes as the fallback sweep, because some conditions, such as a base branch moving into conflict or a check from another app failing, raise no notification.
 GitLab merge requests are not monitored yet.
+Forgejo pull requests are not monitored.
 When no reported check is marked required, a failing reported check still counts, matching `bin/fm-pr-state.sh` for unprotected stacked bases.
 When a required check has reported, optional failures do not notify.
+That limit holds until `config/pr-health-any-failure` exists.
+An empty `config/pr-health-any-failure` also reports a failing check that is not required.
+The first pass records the check.
+A later pass prints it only when the same commit still fails.
+`config/pr-health-label-gated` is read only while that file exists.
+Each line is a check name, or a check name, a tab, and a label.
+A listed check is recorded with the other maintainer-gated CI and is not printed as a failure.
+The named label on the PR releases that check.
+`Full suite` then a tab then `full-ci` is the line for this repository.
+An empty `config/pr-health-approved-green` reports a non-draft PR whose review decision is `APPROVED` and whose every reported check on the latest commit has passed.
+No reported check, a check that is still running, maintainer-gated CI, or a listed label-gated failure is not that report.
+The report does not merge, park, or land the PR.
+An empty `config/pr-health-final` reports a merged or closed PR once and names the account in quotes.
+It then never reads that PR again.
+The line prints only for a PR the monitor read while it was open with `config/pr-health-final` present.
+A check without that file forgets which PRs were seen open.
+A PR that became merged or closed before that, or that the monitor first read already merged or closed, is marked final without a report.
+An empty `config/pr-health-stale-review` reports `CHANGES_REQUESTED` as waiting on the reviewer when every change-requesting review's commit is not the latest commit.
+The commit is `review.commit.oid`.
+Timestamps are not used.
+Reviewer names are quoted.
+Review text is not printed.
+With none of these files, the monitor's lines stay the conflict, required-check, and author-action lines above.
+The four files take effect on the next check and are home-local, the same way as `config/pr-health-monitor`.
 A conflict and an author action each wake once per latest commit, and a missing approval is recorded once per latest commit.
 A failing check wakes once per latest commit and check name, so a check that newly fails at an already reported commit wakes once more while an already reported check never repeats.
 A maintainer-gated suite is recorded once per latest commit and workflow name.
@@ -1802,8 +1836,30 @@ A task with no recorded account, or one whose account is no longer declared, ref
 
 The list covers Claude ships and scouts only.
 A local secondmate's own agent never draws from it: under a list it needs its own [per-secondmate account pin](#per-secondmate-account-pins), and `--account` refuses for every secondmate, local or remote.
-Other runners ignore the list, and `--account` refuses for them.
+Other runners ignore the list, and `--account` refuses for them unless their own list exists, such as [`config/codex-accounts`](#several-codex-accounts-configcodex-accounts).
 Like the single pin, the list is not inherited into secondmate homes.
+
+### Several Codex accounts (config/codex-accounts)
+
+A Codex login lives in the directory `CODEX_HOME` names, `~/.codex` by default.
+A home with more than one ChatGPT plan can let each Codex ship and scout launch on whichever declared Codex home has quota to spare.
+Create `config/codex-accounts` with one account per line, each `ordinary` (the default `~/.codex`, launched with `CODEX_HOME` unset) or the absolute path of an existing Codex home:
+
+```text
+ordinary
+/home/me/.codex-second
+```
+
+Sign each one in once with `CODEX_HOME=<path> codex login`.
+A Codex home holds that account's whole Codex configuration, not only its login, so give a second home the `config.toml` settings its workers need; Codex asks once per home to trust a repository.
+
+The list follows the [Claude account list](#several-claude-accounts-configclaude-accounts) contract with these Codex specifics:
+
+- File format, opt-in behavior, the required `--account <entry>` on every Codex ship or scout spawn, the refusals, the `account=` record, and relaunch reuse are the same; without the list every Codex launch is unchanged and `--account` refuses.
+- [`bin/fm-codex-account-quota.sh`](../bin/fm-codex-account-quota.sh) measures each entry by running `quota-axi --provider codex --profile-only` under that entry's `CODEX_HOME`, and the [`quota-array-dispatch`](../.agents/skills/quota-array-dispatch/SKILL.md) procedure chooses the entry at intake.
+- The sign-in check is `codex login status`, run with the same stripped environment, and a signed-out entry refuses.
+- The launch sets `CODEX_HOME` to the chosen entry, or unsets it for `ordinary`, and unsets `CODEX_API_KEY` and `CODEX_ACCESS_TOKEN`, which Codex would otherwise spend instead of the stored login; `OPENAI_API_KEY` is not a Codex login and stays.
+- Codex has no single-account pin, so a Codex secondmate's own agent ignores the list and launches as it would without it, while `--account` still refuses for every secondmate.
 
 ### Per-secondmate account pins
 
