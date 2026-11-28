@@ -37,6 +37,7 @@ config/backend  runtime session-provider backend override for new tasks; LOCAL, 
 config/t3code-token  LOCAL, gitignored T3 Code mcp-client credential; docs/t3code-backend.md "Sign-in" owns minting, expiry, and secondmate linking
 config/t3code-instances  LOCAL, gitignored, inherited T3 provider-instance map; docs/t3code-backend.md "Provider instances and models" owns schema and catalog validation
 config/calm     Calm presentation preference shared by the Pi extension and the Claude Code mod; LOCAL, gitignored, and not inherited; see docs/configuration.md "Calm preference"
+config/calm-ship  optional Pi-only Calm working-presentation variant, "spaceship" for the saucer and anything else for the default boat; LOCAL, gitignored, and not inherited; see docs/configuration.md "Working-presentation variant"
 config/keep-ai-trailers  optional presence flag to keep AI co-author trailers in this home's fleet commits; LOCAL, gitignored; inherited by secondmate homes; see docs/configuration.md "Commit attribution"
 config/supervision-branch-model config/supervision-branch-effort  Pi supervision-branch model and reasoning-effort pins written by /supervision-model; LOCAL, gitignored, independently settable, and not inherited; see docs/configuration.md "Pi supervision branch model and effort"
 config/supervision-host  optional supervision-host engine setting: the host runs the supervision branch's contract on a headless engine beside a non-Pi primary, away and, on a Claude or Cursor primary, attended; absent runs it on a Claude primary and nowhere else; LOCAL, gitignored, not inherited; see docs/configuration.md "Supervision host"
@@ -59,6 +60,7 @@ config/wait-no-turns  optional presence flag opting this home into default-off w
 config/pr-health-monitor  optional presence flag opting this home into the default-off monitor of its owned PRs; LOCAL, gitignored, and not inherited; see docs/configuration.md "PR health monitor"
 config/pr-follow  optional presence flag opting this home into default-off direct outcome lines for PRs and merge requests the captain explicitly asked to follow; LOCAL, gitignored, and not inherited; see docs/configuration.md "Explicit PR follows"
 config/park-on-review config/auto-land  optional presence flags: the first opts this home into default-off parking of idle ship lanes whose PR only awaits human review, the second opts this home into merge-time cleanup of unparked ship lanes; LOCAL, gitignored, and not inherited; see docs/configuration.md "Park on review"
+config/reclaim-pool-slots  optional presence flag opting this home in to destroying a finished task's returned Treehouse pool slot at teardown (default: slot is kept); LOCAL, gitignored, and not inherited; see docs/configuration.md "Pool slot reclaim"
 config/hold-pr-settle  optional presence flag opting this home into default-off settlement of captain holds that declare a PR policy; LOCAL, gitignored, and not inherited; see docs/configuration.md "PR hold settlement"
 config/hold-answer-words  optional presence flag opting this home into default-off refusal of a captain-hold answer that is only an option letter, plus a Selected answer: line in resolution records; LOCAL, gitignored, and not inherited; see docs/configuration.md "Answer words"
 config/contribution-review-bots  optional exact GitHub-login allowlist for review-bot signals on owned pull requests; LOCAL, gitignored, and not inherited; see docs/configuration.md "Contribution review bots"
@@ -68,6 +70,7 @@ config/ready-after-green  optional presence flag opting this home into default-o
 config/record-export-root  optional one-line absolute dedicated root for default-off allowlisted live sync and teardown archives; LOCAL, gitignored, one canonical home per disjoint owned root, and not inherited; load this skill before interpreting export paths, then see docs/configuration.md "Record export"
 config/status-archive  optional presence flag opting this home into default-off task status archival; LOCAL, gitignored, and not inherited; see docs/configuration.md "Task status archive"
 config/turnend-churn-absorb  optional presence flag opting this home into the default-off absorb of bare turn-end wakes on pane churn; LOCAL, gitignored, and not inherited; see docs/configuration.md "Turn-end pane-churn absorb"
+config/turnend-abort-absorb  optional presence flag opting this home into the default-off absorb of bare turn-end wakes after a worker aborted its no-mistakes run and kept working; LOCAL, gitignored, and not inherited; see docs/configuration.md "Aborted-run turn-end absorb"
 config/wedge-defer-parked-gate  optional presence flag opting this home into the default-off deferral of a wedge escalation for a lane parked at a validation gate awaiting the supervisor's own still-open decision; LOCAL, gitignored, and not inherited; see docs/configuration.md "Parked-gate wait deferral"
 config/wedge-evidence-guards  optional list of absolute operator guard executable paths, one per line, consulted by the watcher before a wedge escalation where a `CRITICAL` answer defers a bounded run of windows; absent means off; LOCAL, gitignored, and not inherited; see docs/configuration.md "Wedge evidence guards"
 config/wedge-defer-worker-wait  optional presence flag opting this home into the default-off deferral of a wedge escalation for a lane whose newest status line is its own still-open blocked: or needs-decision: line; LOCAL, gitignored, and not inherited; see docs/configuration.md "Worker-declared wait deferral"
@@ -180,7 +183,7 @@ state/               runtime records and signals; gitignored
   lane-footprint.json  auto lane budget's per-lane footprint ledger, written only by bin/fm-capacity.sh --publish in auto mode, whose header owns the format
   .lane-vitals-host  cached Windows host view for the auto budget under WSL2 and on native Windows, written only by bin/fm-capacity.sh --publish; safe to delete
   .lane-admission.lock  bin/fm-spawn.sh's machine-wide lane admission lock in the local root home, taken only with admit-spawns; never touch
-  .last-watcher-beat watcher liveness beacon, touched every poll (including while absorbing benign wakes); guard scripts read it
+  .last-watcher-beat watcher liveness beacon, touched at cycle start and bounded step boundaries; guard scripts read it (see docs/turnend-guard.md)
   .subsuper-* .supervise-daemon.*   sub-supervisor internals; never touch
 .no-mistakes/        local validation state and evidence; gitignored
 ```

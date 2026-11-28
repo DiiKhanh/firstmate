@@ -15,6 +15,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
 | Review bots on owned GitHub pull requests | [Contribution review bots](#contribution-review-bots-configcontribution-review-bots) |
 | Stopping idle workers while a PR awaits review, and cleanup on merge | [Park on review](#park-on-review) |
+| Disk reclaimed from a finished task's pool slot | [Pool slot reclaim](#pool-slot-reclaim-configreclaim-pool-slots) |
 | Per-run overrides and tuning | [Environment variables](#environment-variables) |
 
 ## FM_HOME
@@ -180,6 +181,15 @@ The Pi extension reloads this preference on every Pi `session_start`, including 
 The Claude Code mod reloads it on every `session.start`, including same-process session replacement.
 It also loads the preference lazily before any row that can draw ahead of that event, including during `claude --continue` restoration.
 This preference is local to each Firstmate home and is not part of secondmate inherited configuration.
+
+### Working-presentation variant (config/calm-ship)
+
+The optional gitignored `config/calm-ship` file selects Calm's animated working-presentation variant, resolved from the same effective Firstmate home and `FM_CONFIG_OVERRIDE` rules as `config/calm`.
+Only the Pi Calm extension reads this file; the Claude Code Calm mod keeps its sailboat working row regardless of it.
+The file's contents are trimmed of surrounding whitespace, so `spaceship` with or without surrounding whitespace or newlines selects the spaceship; an absent, unreadable, or unrecognized value keeps the default boat.
+The extension reads this file at load and re-reads it on every `session_start`, so a mid-session change takes effect at the next session rather than mid-run.
+[`calm.md`](calm.md#spaceship-variant-configcalm-ship) owns what each presentation renders and how long it stays on screen.
+This file is local to each Firstmate home and is not part of secondmate inherited configuration.
 
 ## Pi bash timeout cap
 
@@ -439,7 +449,10 @@ Removing it stops further retries and leaves the current watcher for the ordinar
 
 Create the empty, home-local `config/codex-stop-park` file to let a Codex primary wait for watcher wakes outside the model between turns.
 The feature is off when the file is absent, and every Codex session then keeps the bounded foreground checkpoint protocol.
-With the file present, only an interactive native Codex session on the verified CLI version that holds this home's session lock parks; every other session keeps the foreground checkpoint.
+The park requires a native interactive Codex session registered through the project SessionStart hook and holding this home's session lock.
+The running Codex executable must report a canonical `codex-cli major.minor.patch` release at or above `0.163.0`, without leading zeroes, prerelease suffixes, or build metadata.
+A version below the minimum, malformed output, or a failed version probe leaves the session on the foreground checkpoint.
+[Runtime verification](verification/runtime-backends.md#native-codex-supervision-park) lists the releases exercised live.
 The supervision protocol is chosen when the session starts, so create or remove the file before starting the Codex session.
 The file is local to each home and is not inherited by secondmate homes.
 [The Codex protocol](supervision-protocols/codex.md) owns the parked operating protocol, and `bin/fm-codex-stop-park.sh` owns version selection, registration, and failure fallback.
@@ -918,6 +931,17 @@ The flag takes effect on the next contribution poll and is not inherited by seco
 The observer's existing `bin/fm-contributions.sh arm` command enables polling when it is not already armed.
 The [captain-hold policy](../.agents/skills/captain-hold-lifecycle/SKILL.md#policy) owns when a forge event may settle a question.
 
+## Pool slot reclaim (config/reclaim-pool-slots)
+
+Returning a Treehouse pool slot resets its tracked git state but leaves every git-ignored build artifact behind (`node_modules`, `.next`, `dist`, Electron builds, and the like), so a pool only ever grows across finished tasks.
+The optional local, gitignored `config/reclaim-pool-slots` presence flag opts this home into reclaiming that disk: after a ship or scout task's own worktree slot is successfully returned, `bin/fm-teardown.sh` then runs `treehouse destroy <slot> --yes` on that same slot.
+Destroy is safe by default - it removes only a merged, clean, idle, unleased worktree and otherwise skips it - so teardown adds no extra landed-work check of its own, and a skip or failure only warns rather than failing an otherwise-successful teardown.
+Create an empty file to enable the flag.
+With the flag absent (the default), teardown never destroys a returned slot, exactly as before this feature existed.
+The trade-off once opted in: the next task dispatched into that project starts from a freshly created worktree and reinstalls its dependencies instead of reusing a pre-warmed slot.
+The flag is home-local and not inherited by secondmate homes.
+This never touches a secondmate home's own pool, a slot leased by another task, an Orca or plain-clone worktree, or any pool other than the one the finishing task's own slot came from.
+
 ## Park on review
 
 The optional local, gitignored `config/park-on-review` presence flag opts this home into stopping the idle agent of a ship lane whose PR or merge request only awaits human review.
@@ -932,6 +956,8 @@ The optional local, gitignored `config/pr-register-scan` presence flag opts this
 With the flag present, the watcher's check sweep runs `bin/fm-pr-check.sh scan` before the merge polls.
 The scan reads a ship task's PR only from a ready report: the task's newest crew-declared status line must be a `done:` line that is exactly `PR <url>`, `PR <url> checks green`, or `PR <url> published for review`, so prose around the URL and any later crew line report nothing.
 Later `resolved:` and `captain-held:` lines are supervisor bookkeeping and do not withdraw a ready report.
+A later `paused:` line that names only that same PR declares the review wait and does not withdraw it either, while a `paused:` line naming no PR or another PR still does.
+Punctuation around a PR URL in the `paused:` line, such as a trailing comma or period or enclosing brackets or quotes, and a `#fragment` after it are ignored when the scan reads that URL.
 It records that PR through the ordinary registration path when the task has no `pr=`, or has that same `pr=` but no published merge poll.
 When the status log named the recorded `pr=` and the ready report names a different PR, that PR replaces the recorded one, so a lane that closes a PR and opens another moves its merge poll.
 The flag also covers the PR a secondmate home's parent-channel report carries for a child's ready report (`bin/fm-inactive-reconcile.sh`): with it present, that report applies the same ready-report spellings, accepts any recognized forge URL, and lets the same replacement override the recorded `pr=`, while with it absent a recorded `pr=` always stands and only a GitHub-shaped `PR <url>` or `PR <url> checks green` line fills in a missing one.
@@ -1136,6 +1162,16 @@ The bound is required rather than cosmetic because churn and pane staleness read
 
 The flag is a home-local supervision-noise preference and is not inherited by secondmate homes, which run their own crew mix.
 [`architecture.md`](architecture.md) owns the triage contract and `bin/fm-watch.sh`'s `signal_turnend_panes_churned` owns the exact evidence and fail-closed boundaries.
+
+## Aborted-run turn-end absorb (config/turnend-abort-absorb)
+
+The optional local, gitignored `config/turnend-abort-absorb` presence flag opts this home into a default-off further form of positive work evidence for a bare turn-end.
+After a worker deliberately aborts a no-mistakes run and keeps working, current state keeps reading the aborted run until a fresh run starts, so every routine turn-end of that worker surfaces.
+With the flag present, a turn-end is absorbed when the task's current-state read is a run-step failed or unknown verdict naming a run that is terminal in the no-mistakes run store with an explicit abort record, and the busy-state verdict is exactly `busy <source>` and its busy-state record has a timestamp newer than that run's last update.
+The abort record is a `cancelled` status with the error `cancelled: aborted by user`, or a `failed` status with the error `step <name>: aborted by user` optionally followed by `: <reason>`, read from structured run-store fields and never from status-line prose.
+A run that failed for any other reason still surfaces, and with the flag absent behavior is unchanged.
+The flag is a home-local supervision-noise preference and is not inherited by secondmate homes.
+`bin/fm-classify-lib.sh`'s `crew_aborted_run_superseded_by_busy` owns the exact evidence and its refusal cases.
 
 ## Parked-gate wait deferral (config/wedge-defer-parked-gate)
 
@@ -1539,7 +1575,7 @@ Enabled primary-session turn-end guard integrations are tracked as repo-level ho
 Kimi remains outside the primary turn-end guard integrations; [`docs/turnend-guard.md`](turnend-guard.md#compatibility-limits) owns its separate captain-approved crew wake hook.
 Primary-session watcher wake protocols are rendered at session start by [`bin/fm-supervision-instructions.sh`](../bin/fm-supervision-instructions.sh) from [`docs/supervision-protocols/`](supervision-protocols/).
 
-Claude uses [hook-owned tokenless re-arm cycles](watcher-continuity.md#claude-stop-hook), Cursor's stop hook parks on the watcher, Grok uses background-notify cycles, Codex uses bounded foreground checkpoints unless the home opts in to its [native Stop park](#codex-native-stop-park-configcodex-stop-park), Pi and pi-signed use the same two tracked primary extensions, omp uses its own two tracked `.omp/extensions/` files with a blocking `session_stop` turn-end hook, and OpenCode uses its TUI plugin.
+Claude uses [hook-owned tokenless re-arm cycles](watcher-continuity.md#claude-stop-hook), Cursor's stop hook parks on the watcher, Grok uses background-notify cycles, Codex selects its mode under the [native Stop park policy](#codex-native-stop-park-configcodex-stop-park), Pi and pi-signed use the same two tracked primary extensions, omp uses its own two tracked `.omp/extensions/` files with a blocking `session_stop` turn-end hook, and OpenCode uses its TUI plugin.
 
 ### Choose the worker harness
 
@@ -3446,13 +3482,13 @@ Making any of them a precondition is what leaves a provably dead runner owning i
 - Supported secondmate retirement preflights each target home's bounded `sweep-home` command before destructive teardown, snapshots its registrations outside the target, then runs the sweep at that home's final deletion or return boundary.
 - If deletion or return fails, teardown restores those registrations and reconciles them before returning the refusal.
 - If restoration or rearming also fails, teardown returns a distinct status and reports the retained registration backup path for manual recovery instead of hiding the retired waits.
-- The sweep retires local registrations and machine-wide claims whose recorded state-root identity matches that home's resolved state root through the same identity-checked, generation-bound retirement path, and leaves foreign-home claims untouched.
+- The sweep retires local registrations and machine-wide claims whose recorded state-root identity matches that home's own `state/` directory, never an inherited `FM_STATE_OVERRIDE`, through the same identity-checked, generation-bound retirement path, and leaves foreign-home claims untouched.
 - Teardown refuses with the home, lease, routing evidence, registrations, claims, and runners retained when identity is uncertain, ownership is unreadable or unreleased, or relevant state exists without a sweep-capable child script.
 
 **Recover from unsupported manual deletion**
 
 Raw manual deletion of a Firstmate home is unsupported because it can orphan a blocking child.
-To recover, restore that home's tracked `bin/fm-procevent.sh`, run `FM_HOME=<home> <home>/bin/fm-procevent.sh sweep-home`, then rerun the supported teardown.
+To recover, restore that home's tracked `bin/fm-procevent.sh`, run `FM_HOME=<home> FM_STATE_OVERRIDE=<home>/state <home>/bin/fm-procevent.sh sweep-home`, then rerun the supported teardown.
 
 The owning-home lease below bounds how long such an orphan can run, but it is a backstop, not a substitute for the supported path.
 
@@ -3736,6 +3772,7 @@ FM_WATCH_CYCLE_LOG_KEEP_LINES=1000   # newest complete lifecycle rows considered
 FM_WATCH_EXTENSION_LOG_KEEP_LINES=0   # opt-in Pi extension diagnostic log (state/.watch-extension.log); unset, empty, non-numeric, zero, or negative disables logging, a positive value keeps that many newest rows; logging never changes supervision behavior
 FM_WATCHER_STALE_GRACE=300   # defaults to FM_GUARD_GRACE if set, else the poll-derived grace (docs/turnend-guard.md "Guard grace and the poll cadence"); seconds before a fresh arm refuses a live holder's stale beacon (attached arms: FM_WATCHER_STALL_BOUND)
 FM_WATCHER_STALL_BOUND=       # live-holder stall bound; default and arm/re-arm behavior: docs/turnend-guard.md "Guard grace and the poll cadence"
+FM_WATCHER_CHECKPOINT_SECS=30   # minimum seconds between the watcher's mid-cycle beacon touches; a cycle shorter than this touches the beacon once, at its top (docs/turnend-guard.md "Guard grace and the poll cadence")
 FM_SIGNAL_GRACE=30      # seconds to coalesce nearby status and turn-end signals into one wake
 FM_WATCHER_CLEANUP_LOCK_BOUND=   # optional watcher EXIT marker-lock wait; default and validation: docs/watcher-continuity.md
 FM_TURNEND_CHURN_ABSORB_SECS=900   # longest one endpoint's bare turn-ends may be deferred on pane-churn evidence alone; only consulted when config/turnend-churn-absorb is present
